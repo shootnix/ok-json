@@ -1,0 +1,130 @@
+module ok/json;
+
+import "json/parse" take ParsedJson;
+import "json/read" take JsonView;
+import "json/value" take JsonKind;
+import "math/decimal" take Decimal;
+import "numbers/bigint" take BigInt;
+
+
+object Json {
+    has origin is JsonView;
+
+    Json(source is string) {
+        origin = JsonView(ParsedJson(source));
+    }
+
+    Json(view is JsonView) {
+        origin = view;
+    }
+
+    required(name is string) is Json {
+        Json(origin.member(name));
+    }
+
+    optional(name is string) is MaybeJsonView {
+        if origin.kind() == JsonKind.object_value && origin.membership(name) {
+            let member = origin.member(name);
+            if member.kind() == JsonKind.null_value {
+                MaybeJsonView();
+            }
+            else {
+                MaybeJsonView(Json(member));
+            }
+        }
+        else {
+            MaybeJsonView();
+        }
+    }
+
+    is_null() is bool { origin.kind() == JsonKind.null_value; }
+    text() is string { origin.text(); }
+    number() is Decimal { origin.number(); }
+    integer() is BigInt { origin.integer(); }
+    int() is int { origin.int(); }
+    boolean() is bool { origin.boolean(); }
+
+    test "basic" {
+        let source = ```
+        {
+            "foo": "bar"
+        }
+        ```;
+        let json = Json(source);
+        test.ok(json.required("foo").text() == "bar");
+        test.ok(json.optional("bar").text("bar not found") == "bar not found");
+    }
+}
+
+object MaybeJsonView {
+    has json_view is @Json;
+
+    MaybeJsonView() {
+        json_view = [];
+    }
+
+    MaybeJsonView(view is Json) {
+        json_view = [view];
+    }
+
+    optional(name is string) is MaybeJsonView {
+        return match json_view.size() {
+            case 0 { self; }
+            else { json_view.first().optional(name); }
+        };
+    }
+
+    text() is string {
+        json_view.first().text();
+    }
+
+    text(default_value is string) is string {
+        return match json_view.size() {
+            case 0 { default_value; }
+            else { self.text(); }
+        };
+    }
+
+    // number 
+    number() is Decimal {
+        json_view.first().number();
+    }
+    number(default_value is Decimal) is Decimal {
+        return match json_view.size() {
+            case 0 { default_value; }
+            else { self.number(); }
+        };
+    }
+    
+    // integer
+    integer() is BigInt {
+        json_view.first().integer();
+    }
+    integer(default_value is BigInt) is BigInt {
+        return match json_view.size() {
+            case 0 { default_value; }
+            else { self.integer(); }
+        };
+    }
+    
+    // int
+    int() is int {
+        json_view.first().int();
+    }
+    int(default_value is int) is int {
+        return match json_view.size() {
+            case 0 { default_value; }
+            else { self.int(); }
+        };
+    }
+    // boolean
+    boolean() is bool {
+        json_view.first().boolean();
+    }
+    boolean(default_value is bool) is bool {
+        return match json_view.size() {
+            case 0 { default_value; }
+            else { self.boolean(); }
+        };
+    }
+}
